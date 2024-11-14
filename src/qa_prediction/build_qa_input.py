@@ -4,6 +4,8 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/..")
 import utils
 import random
 from typing import Callable
+import json
+import random
 
 class PromptBuilder(object):
     MCQ_INSTRUCTION = """Please answer the following questions. Please select the answers from the given choices and return the answer only."""
@@ -16,7 +18,7 @@ class PromptBuilder(object):
     GRAPH_CONTEXT = """Reasoning Paths:\n{context}\n\n"""
     CHOICES = """\nChoices:\n{choices}"""
     EACH_LINE = """ Please return each answer in a new line."""
-    def __init__(self, prompt_path, add_rule = False, use_true = False, cot = False, explain = False, use_random = False, each_line = False, maximun_token = 4096, tokenize: Callable = lambda x: len(x)):
+    def __init__(self, prompt_path, qid2path=None, add_rule = False, use_true = False, cot = False, explain = False, use_random = False, each_line = False, maximun_token = 4096, tokenize: Callable = lambda x: len(x)):
         self.prompt_template = self._read_prompt_template(prompt_path)
         self.add_rule = add_rule
         self.use_true = use_true
@@ -26,6 +28,7 @@ class PromptBuilder(object):
         self.maximun_token = maximun_token
         self.tokenize = tokenize
         self.each_line = each_line
+        self.qid2path = qid2path
         
     def _read_prompt_template(self, template_file):
         with open(template_file) as fin:
@@ -73,8 +76,15 @@ class PromptBuilder(object):
             else:
                 rules = question_dict['predicted_paths']
             if len(rules) > 0:
-                reasoning_paths = self.apply_rules(graph, rules, entities)
-                lists_of_paths = [utils.path_to_string(p) for p in reasoning_paths]
+                if self.qid2path == None:
+                    reasoning_paths = self.apply_rules(graph, rules, entities)
+                    lists_of_paths = [utils.path_to_string(p) for p in reasoning_paths]
+                elif question_dict['id'] in self.qid2path:
+                    lists_of_paths = self.qid2path[question_dict['id']]
+                else:
+                    reasoning_paths = self.apply_rules(graph, rules, entities)
+                    lists_of_paths = [utils.path_to_string(p) for p in reasoning_paths]
+
                 # context = "\n".join([utils.path_to_string(p) for p in reasoning_paths])
             else:
                 lists_of_paths = []
@@ -123,7 +133,8 @@ class PromptBuilder(object):
             return all_paths
         else:
             # Shuffle the paths
-            random.shuffle(list_of_paths)
+            # if self.qid2path == None:
+            #     random.shuffle(list_of_paths)
             new_list_of_paths = []
             # check the length of the prompt
             for p in list_of_paths:
@@ -132,4 +143,3 @@ class PromptBuilder(object):
                 if self.tokenize(tmp_all_tokens) > maximun_token:
                     return "\n".join(new_list_of_paths)
                 new_list_of_paths.append(p)
-            

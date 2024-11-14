@@ -11,3 +11,5 @@ save_models/
 *.pyc
 tmp/
 RoG_train.tar.gz
+datasets/ultra_training
+*.pkl

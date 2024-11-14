@@ -87,6 +87,13 @@ def prediction(data, processed_list, input_builder, model):
     }
     return result
 
+def read_sorted_path(file_path):
+    data = {}
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            d = json.loads(line.strip())
+            data[d['qid']] = d['reasoning_path']
+    return data
 
 def main(args, LLM):
     input_file = os.path.join(args.data_path, args.d)
@@ -110,7 +117,13 @@ def main(args, LLM):
         rule_postfix += "_filter_empty"
     if args.each_line:
         rule_postfix += "_each_line"
-        
+    
+    data_name = args.d.split('-')[-1]
+    if args.sorted_by != None:
+        rule_postfix += f"_{args.sorted_by}"
+        qid2path = read_sorted_path(f"/home/bonbak/ULTRA/paths/{data_name}/{args.sorted_by}/{data_name}_sorted_path.jsonl")
+    else:
+        qid2path=None
     print("Load dataset from finished")
     output_dir = os.path.join(
         args.predict_path, args.d, args.model_name, args.split, rule_postfix
@@ -119,11 +132,13 @@ def main(args, LLM):
     # Predict
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    
     if LLM is not None:
         model = LLM(args)
         input_builder = PromptBuilder(
             args.prompt_path,
-            args.add_rule,
+            qid2path=qid2path,
+            add_rule=args.add_rule,
             use_true=args.use_true,
             cot=args.cot,
             explain=args.explain,
@@ -168,7 +183,12 @@ def main(args, LLM):
                     fout.write(json.dumps(res) + "\n")
                     fout.flush()
     else:
+        import pickle
+        with open(f'RoG-{data_name}_ids.pkl', 'rb') as file:
+            ids = pickle.load(file)
+
         for data in tqdm(dataset):
+            if data['id'] not in ids: continue
             res = prediction(data, processed_list, input_builder, model)
             if res is not None:
                 if args.debug:
@@ -185,6 +205,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--data_path", type=str, default="rmanluo"
     )
+    argparser.add_argument("--sorted_by", type=str, default=None)
     argparser.add_argument("--d", "-d", type=str, default="RoG-webqsp")
     argparser.add_argument("--split", type=str, default="test")
     argparser.add_argument("--predict_path", type=str, default="results/KGQA")
